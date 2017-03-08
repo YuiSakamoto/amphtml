@@ -14,9 +14,17 @@
  * limitations under the License.
  */
 
-import {closestBySelector, matches} from '../../../src/dom';
+import {
+  closestBySelector,
+  matches,
+  scopedQuerySelector,
+} from '../../../src/dom';
 import {dev, user} from '../../../src/log';
+import {getMode} from '../../../src/mode';
+import {layoutRectLtwh} from '../../../src/layout-rect';
 import {map} from '../../../src/utils/object';
+import {viewportForDoc} from '../../../src/viewport';
+import {whenContentIniLoad} from '../../../src/friendly-iframe-embed';
 
 const TAG = 'amp-analytics';
 
@@ -89,6 +97,14 @@ export class AnalyticsRoot {
   getHostElement() {}
 
   /**
+   * The signals for the root.
+   *
+   * @return {!../../../src/utils/signals.Signals}
+   * @abstract
+   */
+  signals() {}
+
+  /**
    * Whether this analytics root contains the specified node.
    *
    * @param {!Node} node
@@ -155,7 +171,7 @@ export class AnalyticsRoot {
     // Query search based on the selection method.
     let found;
     if (selectionMethod == 'scope') {
-      found = context.querySelector(selector);
+      found = scopedQuerySelector(context, selector);
     } else if (selectionMethod == 'closest') {
       found = closestBySelector(context, selector);
     } else {
@@ -167,6 +183,29 @@ export class AnalyticsRoot {
       return found;
     }
     return null;
+  }
+
+  /**
+   * Searches the AMP element that matches the selector within the scope of the
+   * analytics root in relationship to the specified context node.
+   *
+   * @param {!Element} context
+   * @param {string} selector DOM query selector.
+   * @param {?string=} selectionMethod Allowed values are `null`,
+   *   `'closest'` and `'scope'`.
+   * @return {?AmpElement} AMP element corresponding to the selector if found.
+   */
+  getAmpElement(context, selector, selectionMethod) {
+    const element = this.getElement(context, selector, selectionMethod);
+    if (element) {
+      // TODO(dvoytenko, #6794): Remove old `-amp-element` form after the new
+      // form is in PROD for 1-2 weeks.
+      user().assert(
+          (element.classList.contains('-amp-element')
+            || element.classList.contains('i-amphtml-element')),
+          'Element "%s" is required to be an AMP element', selector);
+    }
+    return element;
   }
 
   /**
@@ -228,6 +267,14 @@ export class AnalyticsRoot {
       }
     };
   }
+
+  /**
+   * Returns the promise that will be resolved as soon as the elements within
+   * the root have been loaded inside the first viewport of the root.
+   * @return {!Promise}
+   * @abstract
+   */
+  whenIniLoaded() {}
 }
 
 
@@ -259,8 +306,32 @@ export class AmpdocAnalyticsRoot extends AnalyticsRoot {
   }
 
   /** @override */
+  signals() {
+    return this.ampdoc.signals();
+  }
+
+  /** @override */
   getElementById(id) {
     return this.ampdoc.getElementById(id);
+  }
+
+  /** @override */
+  whenIniLoaded() {
+    const viewport = viewportForDoc(this.ampdoc);
+    let rect;
+    if (getMode(this.ampdoc.win).runtime == 'inabox') {
+      // TODO(dvoytenko, #7971): This is currently addresses incorrect position
+      // calculations in a in-a-box viewport where all elements are offset
+      // to the bottom of the embed. The current approach, even if fixed, still
+      // creates a significant probability of risk condition.
+      // Once address, we can simply switch to the 0/0 approach in the `else`
+      // clause.
+      rect = viewport.getLayoutRect(this.getRootElement());
+    } else {
+      const size = viewport.getSize();
+      rect = layoutRectLtwh(0, 0, size.width, size.height);
+    }
+    return whenContentIniLoad(this.ampdoc, this.ampdoc.win, rect);
   }
 }
 
@@ -296,8 +367,18 @@ export class EmbedAnalyticsRoot extends AnalyticsRoot {
   }
 
   /** @override */
+  signals() {
+    return this.embed.signals();
+  }
+
+  /** @override */
   getElementById(id) {
     return this.embed.win.document.getElementById(id);
+  }
+
+  /** @override */
+  whenIniLoaded() {
+    return this.embed.whenIniLoaded();
   }
 }
 

@@ -43,6 +43,51 @@ const MessageType = {
 export let Message;
 
 /**
+ * @typedef {function(string, *, boolean):(!Promise<*>|undefined)}
+ */
+export let RequestHandler;
+
+/**
+ * @fileoverview This class is a de-facto implementation of MessagePort
+ * from Channel Messaging API:
+ * https://developer.mozilla.org/en-US/docs/Web/API/Channel_Messaging_API
+ */
+export class WindowPortEmulator {
+  /**
+   * @param {!Window} win
+   * @param {string} origin
+   */
+  constructor(win, origin) {
+    /** @const {!Window} */
+    this.win = win;
+    /** @private {string} */
+    this.origin_ = origin;
+  }
+
+  /**
+   * @param {string} eventType
+   * @param {function(!Event):undefined} handler
+   */
+  addEventListener(eventType, handler) {
+    listen(this.win, 'message', e => {
+      if (e.origin == this.origin_ &&
+          e.source == this.win.parent && e.data.app == APP) {
+        handler(e);
+      }
+    });
+  }
+
+  /**
+   * @param {Object} data
+   */
+  postMessage(data) {
+    this.win.parent./*OK*/postMessage(data, this.origin_);
+  }
+  start() {
+  }
+}
+
+/**
  * @fileoverview This is used in amp-viewer-integration.js for the
  * communication protocol between AMP and the viewer. In the comments, I will
  * refer to the communication as a conversation between me and Bob. The
@@ -53,49 +98,66 @@ export class Messaging {
 
   /**
    * Conversation (messaging protocol) between me and Bob.
-   * @param {!Window} source
-   * @param {!Window} target
-   * @param {string} targetOrigin
+   * @param {!Window} win
+   * @param {!MessagePort|!WindowPortEmulator} port
    */
-  constructor(source, target, targetOrigin) {
-    /** @private {!Window} */
-    this.source_ = source;
+  constructor(win, port) {
+    /** @const {!Window} */
+    this.win = win;
+    /** @const @private {!MessagePort|!WindowPortEmulator} */
+    this.port_ = port;
     /** @private {!number} */
     this.requestIdCounter_ = 0;
     /** @private {!Object<number, {resolve: function(*), reject: function(!Error)}>} */
     this.waitingForResponse_ = {};
-    /** @const @private {!Window} */
-    this.target_ = target;
-    /** @const @private {string} */
-    this.targetOrigin_ = targetOrigin;
-    /**  @private {?function(string, *, boolean):(!Promise<*>|undefined)} */
-    this.requestProcessor_ = null;
+    /**
+     * A map from message names to request handlers.
+     * @private {!Object<string, !RequestHandler>}
+     */
+    this.messageHandlers_ = {};
 
-    dev().assert(this.targetOrigin_, 'Target origin must be specified!');
+    /** @private {?RequestHandler} */
+    this.defaultHandler_ = null;
 
-    listen(source, 'message', this.handleMessage_.bind(this));
+    this.port_.addEventListener('message', this.handleMessage_.bind(this));
+    this.port_.start();
+  }
+
+  /**
+   * Registers a method that will handle requests sent to the specified
+   * message name.
+   * @param {string} messageName The name of the message to handle.
+   * @param {!RequestHandler} requestHandler
+   */
+  registerHandler(messageName, requestHandler) {
+    this.messageHandlers_[messageName] = requestHandler;
+  }
+
+  /**
+   * Unregisters the handler for the specified message name.
+   * @param {string} messageName The name of the message to unregister.
+   */
+  unregisterHandler(messageName) {
+    delete this.messageHandlers_[messageName];
+  }
+
+  /**
+   * @param {?RequestHandler} requestHandler
+   */
+  setDefaultHandler(requestHandler) {
+    this.defaultHandler_ = requestHandler;
   }
 
   /**
    * Bob sent me a message. I need to decide if it's a new request or
    * a response to a previous 'conversation' we were having.
-   * @param {?Event} event
+   * @param {!Event} event
    * @private
    */
   handleMessage_(event) {
-    if (!event || event.source != this.target_ ||
-      event.origin != this.targetOrigin_) {
-      dev().fine(TAG +
-        ': handleMessage_, This message is not for us: ', event);
-      return;
-    }
+    dev().fine(TAG, 'AMPDOC got a message:', event.type, event.data);
     /** @type {Message} */
     const message = event.data;
-    if (message.app != APP) {
-      dev().fine(
-        TAG + ': handleMessage_, wrong APP: ', event);
-      return;
-    }
     if (message.type == MessageType.REQUEST) {
       this.handleRequest_(message);
     } else if (message.type == MessageType.RESPONSE) {
@@ -173,7 +235,7 @@ export class Messaging {
    * @private
    */
   sendMessage_(message) {
-    this.target_./*OK*/postMessage(message, this.targetOrigin_);
+    this.port_./*OK*/postMessage(message);
   }
 
   /**
@@ -185,14 +247,19 @@ export class Messaging {
    */
   handleRequest_(message) {
     dev().fine(TAG, 'handleRequest_', message);
-    if (!this.requestProcessor_) {
+
+    let handler = this.messageHandlers_[message.name];
+    if (!handler) {
+      handler = this.defaultHandler_;
+    }
+    if (!handler) {
       throw new Error(
         'Cannot handle request because handshake is not yet confirmed!');
     }
-    const requestId = message.requestid;
+
+    const promise = handler(message.name, message.data, !!message.rsvp);
     if (message.rsvp) {
-      const promise =
-        this.requestProcessor_(message.name, message.data, message.rsvp);
+      const requestId = message.requestid;
       if (!promise) {
         this.sendResponseError_(
           requestId, message.name, new Error('no response'));
@@ -221,19 +288,12 @@ export class Messaging {
       delete this.waitingForResponse_[requestId];
       if (message.error) {
         this.logError_(TAG + ': handleResponse_ error: ', message.error);
-        pending.reject(new Error(message.error));
+        pending.reject(
+          new Error(`Request ${message.name} failed: ${message.error}`));
       } else {
         pending.resolve(message.data);
       }
     }
-  }
-
-  /**
-   * @param {function(string, *, boolean):(!Promise<*>|undefined)}
-   *    requestProcessor
-   */
-  setRequestProcessor(requestProcessor) {
-    this.requestProcessor_ = requestProcessor;
   }
 
   /**
@@ -245,7 +305,7 @@ export class Messaging {
     let stateStr = 'amp-messaging-error-logger: ' + state;
     const dataStr = ' data: ' + this.errorToString_(opt_data);
     stateStr += dataStr;
-    this.source_['viewerState'] = stateStr;
+    this.win['viewerState'] = stateStr;
   };
 
   /**

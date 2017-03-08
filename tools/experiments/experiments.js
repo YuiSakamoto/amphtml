@@ -16,7 +16,8 @@
 
 import '../../third_party/babel/custom-babel-helpers';
 import '../../src/polyfills';
-import {dev, initLogConstructor} from '../../src/log';
+import {dev, initLogConstructor, setReportError} from '../../src/log';
+import {reportError} from '../../src/error';
 import {getCookie, setCookie} from '../../src/cookies';
 import {getMode} from '../../src/mode';
 import {isExperimentOn, toggleExperiment} from '../../src/experiments';
@@ -26,6 +27,7 @@ import {onDocumentReady} from '../../src/document-ready';
 import '../../src/service/timer-impl';
 
 initLogConstructor();
+setReportError(reportError);
 
 const COOKIE_MAX_AGE_DAYS = 180;  // 6 month
 
@@ -91,20 +93,14 @@ const EXPERIMENTS = [
     cleanupIssue: 'https://github.com/ampproject/amphtml/issues/6217',
   },
   {
-    id: 'amp-inabox',
-    name: 'AMP inabox',
-    spec: 'https://github.com/ampproject/amphtml/issues/5700',
-    cleanupIssue: 'https://github.com/ampproject/amphtml/issues/6156',
-  },
-  {
-    id: 'amp-form-custom-validations',
-    name: 'AMP Form Custom Validations',
-    spec: 'https://github.com/ampproject/amphtml/issues/3343',
-    cleanupIssue: 'https://github.com/ampproject/amphtml/issues/5423',
-  },
-  {
     id: 'amp-form-var-sub',
-    name: 'Variable Substitutions in AMP Form inputs',
+    name: 'Variable Substitutions in AMP Form inputs for POST/GET submits',
+    spec: 'https://github.com/ampproject/amphtml/issues/5654',
+    cleanupIssue: 'https://github.com/ampproject/amphtml/issues/6377',
+  },
+  {
+    id: 'amp-form-var-sub-for-post',
+    name: 'Variable Substitutions in AMP Form inputs for POST submits only',
     spec: 'https://github.com/ampproject/amphtml/issues/5654',
     cleanupIssue: 'https://github.com/ampproject/amphtml/issues/6377',
   },
@@ -150,6 +146,11 @@ const EXPERIMENTS = [
     spec: 'https://github.com/ampproject/amphtml/issues/4152',
   },
   {
+    id: 'amp-lightbox-a4a-proto',
+    name: 'Allows the new lightbox experience to be used in A4A (prototype).',
+    spec: 'https://github.com/ampproject/amphtml/issues/7743',
+  },
+  {
     id: 'amp-lightbox-viewer-auto',
     name: 'Allows the new lightbox experience to automatically include some ' +
         'elements without the need to manually add the `lightbox` attribute',
@@ -175,7 +176,7 @@ const EXPERIMENTS = [
   },
   {
     id: 'make-body-relative',
-    name: 'Sets the body to position:relative.',
+    name: 'Sets the body to position:relative (launched)',
     spec: 'https://github.com/ampproject/amphtml/issues/5667',
     cleanupIssue: 'https://github.com/ampproject/amphtml/issues/5660',
   },
@@ -210,21 +211,9 @@ const EXPERIMENTS = [
     cleanupIssue: 'https://github.com/ampproject/amphtml/issues/5888',
   },
   {
-    id: 'amp-ad-loading-ux',
-    name: 'New default loading UX to amp-ad',
-    cleanupIssue: 'https://github.com/ampproject/amphtml/issues/6009',
-  },
-  {
     id: 'visibility-v2',
     name: 'New visibility tracking using native IntersectionObserver',
     cleanupIssue: 'https://github.com/ampproject/amphtml/issues/6254',
-  },
-  {
-    id: 'amp-selector',
-    name: 'Amp selector extension',
-    cleanupIssue: 'https://github.com/ampproject/amphtml/issues/6168',
-    spec: 'https://github.com/ampproject/amphtml/blob/master/extensions/' +
-        'amp-selector/amp-selector.md',
   },
   {
     id: 'amp-accordion-session-state-optout',
@@ -243,11 +232,45 @@ const EXPERIMENTS = [
     cleanupIssue: 'https://github.com/ampproject/amphtml/issues/2198',
   },
   {
+    id: 'version-locking',
+    name: 'Force all extensions to have the same release ' +
+        'as the main JS binary',
+    cleanupIssue: 'DO_NOT_SUBMIT',
+  },
+  {
     id: 'amp-bind',
     name: 'AMP extension for dynamic content',
     cleanupIssue: 'https://github.com/ampproject/amphtml/issues/7156',
     spec: 'https://github.com/ampproject/amphtml/blob/master/extensions/' +
         'amp-bind/amp-bind.md',
+  },
+  {
+    id: 'web-worker',
+    name: 'Web worker for background processing',
+    cleanupIssue: 'https://github.com/ampproject/amphtml/issues/7156',
+  },
+  {
+    id: 'jank-meter',
+    name: 'Display jank meter',
+  },
+  {
+    id: 'amp-selector',
+    name: 'Amp selector extension- [LAUNCHED]',
+    cleanupIssue: 'https://github.com/ampproject/amphtml/issues/6168',
+    spec: 'https://github.com/ampproject/amphtml/blob/master/extensions/' +
+         'amp-selector/amp-selector.md',
+  },
+  {
+    id: 'sticky-ad-early-load',
+    name: 'Load sticky-ad early after user first scroll' +
+        'Only apply to 1.0 version',
+    cleanupIssue: 'https://github.com/ampproject/amphtml/issues/7479',
+  },
+  {
+    id: 'amp-fx-parallax',
+    name: 'Amp extension for a parallax effect',
+    cleanupIssue: 'https://github.com/ampproject/amphtml/issues/7801',
+    spec: 'https://github.com/ampproject/amphtml/issues/1443',
   },
 ];
 
@@ -383,7 +406,11 @@ function toggleExperiment_(id, name, opt_on) {
     if (id == CANARY_EXPERIMENT_ID) {
       const validUntil = Date.now() +
           COOKIE_MAX_AGE_DAYS * 24 * 60 * 60 * 1000;
-      setCookie(window, 'AMP_CANARY', (on ? '1' : '0'), (on ? validUntil : 0));
+      setCookie(window, 'AMP_CANARY',
+          (on ? '1' : '0'), (on ? validUntil : 0), {
+            // Set explicit domain, so the cookie gets send to sub domains.
+            domain: location.hostname,
+          });
     } else {
       toggleExperiment(window, id, on);
     }

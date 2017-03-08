@@ -28,7 +28,7 @@ import {dev} from '../log';
 import {numeric} from '../transition';
 import {onDocumentReady, whenDocumentReady} from '../document-ready';
 import {platformFor} from '../platform';
-import {px, setStyle, setStyles} from '../style';
+import {px, setStyle, setStyles, computedStyle} from '../style';
 import {timerFor} from '../timer';
 import {installVsyncService} from './vsync-impl';
 import {viewerForDoc} from '../viewer';
@@ -179,6 +179,12 @@ export class Viewport {
       this.globalDoc_.documentElement.classList.add(
           'i-amphtml-make-body-block');
     }
+
+    // To avoid browser restore scroll position when traverse history
+    if (isIframed(this.ampdoc.win) &&
+        ('scrollRestoration' in this.ampdoc.win.history)) {
+      this.ampdoc.win.history.scrollRestoration = 'manual';
+    }
   }
 
   /** @override */
@@ -308,8 +314,12 @@ export class Viewport {
   }
 
   /**
-   * Returns the scroll height of the content of the document. Note that this
-   * method is not cached since we there's no indication when it might change.
+   * Returns the scroll height of the content of the document, including the
+   * padding top for the viewer header.
+   * The scrollHeight will be the viewport height if there's not enough content
+   * to fill up the viewport.
+   * Note that this method is not cached since we there's no indication when
+   * it might change.
    * @return {number}
    */
   getScrollHeight() {
@@ -431,19 +441,54 @@ export class Viewport {
    */
   enterLightboxMode() {
     this.viewer_.sendMessage('requestFullOverlay', {}, /* cancelUnsent */true);
-    this.disableTouchZoom();
+    this.enterOverlayMode();
     this.hideFixedLayer();
     this.vsync_.mutate(() => this.binding_.updateLightboxMode(true));
   }
 
   /**
-   * Instruct the viewport to enter lightbox mode.
+   * Instruct the viewport to leave lightbox mode.
    */
   leaveLightboxMode() {
     this.viewer_.sendMessage('cancelFullOverlay', {}, /* cancelUnsent */true);
     this.showFixedLayer();
-    this.restoreOriginalTouchZoom();
+    this.leaveOverlayMode();
     this.vsync_.mutate(() => this.binding_.updateLightboxMode(false));
+  }
+
+  /*
+   * Instruct the viewport to enter overlay mode.
+   */
+  enterOverlayMode() {
+    this.disableTouchZoom();
+    this.disableScroll();
+  }
+
+  /*
+   * Instruct the viewport to leave overlay mode.
+   */
+  leaveOverlayMode() {
+    this.resetScroll();
+    this.restoreOriginalTouchZoom();
+  }
+
+  /*
+   * Disable the scrolling by setting overflow: hidden.
+   * Should only be used for temporarily disabling scroll.
+   */
+  disableScroll() {
+    this.vsync_.mutate(() => {
+      this.binding_.disableScroll();
+    });
+  }
+
+  /*
+   * Reset the scrolling by removing overflow: hidden.
+   */
+  resetScroll() {
+    this.vsync_.mutate(() => {
+      this.binding_.resetScroll();
+    });
   }
 
   /**
@@ -808,6 +853,17 @@ export class ViewportBindingDef {
    */
   showViewerHeader(unusedTransient, unusedPaddingTop) {}
 
+  /*
+   * Disable the scrolling by setting overflow: hidden.
+   * Should only be used for temporarily disabling scroll.
+   */
+  disableScroll() {}
+
+  /*
+   * Reset the scrolling by removing overflow: hidden.
+   */
+  resetScroll() {}
+
   /**
    * Updates the viewport whether it's currently in the lightbox or a normal
    * mode.
@@ -846,7 +902,10 @@ export class ViewportBindingDef {
   getScrollWidth() {}
 
   /**
-   * Returns the scroll height of the content of the document.
+   * Returns the scroll height of the content of the document, including the
+   * padding top for the viewer header.
+   * The scrollHeight will be the viewport height if there's not enough content
+   * to fill up the viewport.
    * @return {number}
    */
   getScrollHeight() {}
@@ -987,6 +1046,18 @@ export class ViewportBindingNatural_ {
   }
 
   /** @override */
+  disableScroll() {
+    this.win.document.documentElement.classList.add(
+        'i-amphtml-scroll-disabled');
+  }
+
+  /** @override */
+  resetScroll() {
+    this.win.document.documentElement.classList.remove(
+        'i-amphtml-scroll-disabled');
+  }
+
+  /** @override */
   updateLightboxMode(unusedLightboxMode) {
     // The layout is always accurate.
   }
@@ -1014,8 +1085,9 @@ export class ViewportBindingNatural_ {
 
   /** @override */
   getScrollLeft() {
-    return this.getScrollingElement_()./*OK*/scrollLeft ||
-        this.win./*OK*/pageXOffset;
+    // The html is set to overflow-x: hidden so the document cannot be
+    // scrolled horizontally. The scrollLeft will always be 0.
+    return 0;
   }
 
   /** @override */
@@ -1235,9 +1307,10 @@ export class ViewportBindingNaturalIosEmbed_ {
       // Add extra paddingTop to make the content stay at the same position
       // when the hiding header operation is transient
       onDocumentReady(this.win.document, doc => {
+        const body = dev().assertElement(doc.body);
         const existingPaddingTop =
-            this.win./*OK*/getComputedStyle(doc.body)['padding-top'] || '0';
-        setStyles(dev().assertElement(doc.body), {
+            computedStyle(this.win, body).paddingTop || '0';
+        setStyles(body, {
           paddingTop: `calc(${existingPaddingTop} + ${lastPaddingTop}px)`,
           borderTop: '',
         });
@@ -1254,6 +1327,16 @@ export class ViewportBindingNaturalIosEmbed_ {
     }
     // No need to adjust borderTop and paddingTop when the showing header
     // operation is transient
+  }
+
+  /** @override */
+  disableScroll() {
+    // This is not supported in ViewportBindingNaturalIosEmbed_
+  }
+
+  /** @override */
+  resetScroll() {
+    // This is not supported in ViewportBindingNaturalIosEmbed_
   }
 
   /** @override */
@@ -1301,7 +1384,9 @@ export class ViewportBindingNaturalIosEmbed_ {
 
   /** @override */
   getScrollLeft() {
-    return Math.round(this.pos_.x);
+    // The html is set to overflow-x: hidden so the document cannot be
+    // scrolled horizontally. The scrollLeft will always be 0.
+    return 0;
   }
 
   /** @override */
@@ -1539,6 +1624,16 @@ export class ViewportBindingIosEmbedWrapper_ {
   }
 
   /** @override */
+  disableScroll() {
+    this.wrapper_.classList.add('i-amphtml-scroll-disabled');
+  }
+
+  /** @override */
+  resetScroll() {
+    this.wrapper_.classList.remove('i-amphtml-scroll-disabled');
+  }
+
+  /** @override */
   updateLightboxMode(unusedLightboxMode) {
     // The layout is always accurate.
   }
@@ -1558,7 +1653,9 @@ export class ViewportBindingIosEmbedWrapper_ {
 
   /** @override */
   getScrollLeft() {
-    return this.wrapper_./*OK*/scrollLeft;
+    // The wrapper is set to overflow-x: hidden so the document cannot be
+    // scrolled horizontally. The scrollLeft will always be 0.
+    return 0;
   }
 
   /** @override */
@@ -1765,6 +1862,12 @@ function getViewportType(win, viewer) {
   if (!isIframed(win) && (getMode(win).localDev || getMode(win).development)) {
     return ViewportType.NATURAL_IOS_EMBED;
   }
+
+  // Enable iOS Embedded mode for iframed tests (e.g. integration tests).
+  if (isIframed(win) && getMode(win).test) {
+    return ViewportType.NATURAL_IOS_EMBED;
+  }
+
   // Override to ios-embed for iframe-viewer mode.
   // TODO(lannka, #6213): Reimplement binding selection for in-a-box.
   if (isIframed(win) && viewer.isEmbedded()) {

@@ -635,6 +635,14 @@ export class BaseElement {
   }
 
   /**
+   * An implementation can call this method to signal to the element that
+   * it has started rendering.
+   */
+  renderStarted() {
+    this.element.renderStarted();
+  }
+
+  /**
    * Returns the original nodes of the custom element without any service nodes
    * that could have been added for markup. These nodes can include Text,
    * Comment and other child nodes.
@@ -689,8 +697,8 @@ export class BaseElement {
   }
 
   /**
-   * Returns the layout rectangle of the element used for reporting this
-   * element's intersection with the viewport.
+   * Returns the layout rectangle used for when calculating this element's
+   * intersection with the viewport.
    * @return {!./layout-rect.LayoutRectDef}
    */
   getIntersectionElementLayoutBox() {
@@ -769,6 +777,24 @@ export class BaseElement {
   }
 
   /**
+   * Collapses the element, setting it to `display: none`, and notifies its
+   * owner (if there is one) through {@link collapsedCallback} that the element
+   * is no longer visible.
+   */
+  collapse() {
+    this.element.getResources().collapseElement(this.element);
+  }
+
+  /**
+   * Return a promise that request the runtime to collapse one element
+   * @return {!Promise}
+   */
+  attemptCollapse() {
+    return this.element.getResources().attemptCollapse(this.element);
+  }
+
+
+  /**
    * Return a promise that requests the runtime to update
    * the height of this element to the specified value.
    * The runtime will schedule this request and attempt to process it
@@ -836,20 +862,29 @@ export class BaseElement {
   }
 
   /**
-   * Collapses the element, setting it to `display: none`, and notifies its
-   * owner (if there is one) through {@link collapsedCallback} that the element
-   * is no longer visible.
+   * Called every time an owned AmpElement collapses itself.
+   * See {@link collapse}.
+   * @param {!AmpElement} unusedElement Child element that was collapsed.
    */
-  collapse() {
-    this.element.getResources().collapseElement(this.element);
+  collapsedCallback(unusedElement) {
+    // Subclasses may override.
   }
 
   /**
-   * Called every time an owned AmpElement collapses itself.
-   * See {@link collapse}.
-   * @param {!AmpElement} unusedElement
+   * Expands the element, resetting its default display value, and notifies its
+   * owner (if there is one) through {@link expandedCallback} that the element
+   * is no longer visible.
    */
-  collapsedCallback(unusedElement) {
+  expand() {
+    this.element.getResources().expandElement(this.element);
+  }
+
+  /**
+   * Called every time an owned AmpElement expands itself.
+   * See {@link expand}.
+   * @param {!AmpElement} unusedElement Child element that was expanded.
+   */
+  expandedCallback(unusedElement) {
     // Subclasses may override.
   }
 

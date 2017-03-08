@@ -18,22 +18,29 @@
 import {AdStrategy} from '../ad-strategy';
 import {PlacementState, getPlacementsFromConfigObj} from '../placement';
 import {AdTracker} from '../ad-tracker';
-import * as sinon from 'sinon';
 
-describe('ad-strategy', () => {
+describes.realWin('amp-strategy', {
+  amp: {
+    runtimeOn: true,
+    ampdoc: 'single',
+    extensions: ['amp-ad'],
+  },
+}, env => {
 
   let sandbox;
   let container;
 
   beforeEach(() => {
-    sandbox = sinon.sandbox.create();
-    container = document.createElement('div');
-    document.body.appendChild(container);
-  });
+    sandbox = env.sandbox;
 
-  afterEach(() => {
-    sandbox.restore();
-    document.body.removeChild(container);
+    env.win.frameElement.style.height = '1000px';
+
+    const belowFoldSpacer = document.createElement('div');
+    belowFoldSpacer.style.height = '1000px';
+    env.win.document.body.appendChild(belowFoldSpacer);
+
+    container = env.win.document.createElement('div');
+    env.win.document.body.appendChild(container);
   });
 
   it('should place an ad in the first placement only with correct attributes',
@@ -64,19 +71,17 @@ describe('ad-strategy', () => {
             },
           ],
         };
-        const placements = getPlacementsFromConfigObj(window, configObj);
+        const placements = getPlacementsFromConfigObj(env.win, configObj);
         expect(placements).to.have.lengthOf(2);
 
-        const adStrategy = new AdStrategy('adsense', placements, [
-          {
-            name: 'custom-att-1',
-            value: 'val-1',
-          },
-          {
-            name: 'custom-att-2',
-            value: 'val-2',
-          },
-        ], new AdTracker([], 0), 1);
+        const attributes = {
+          'type': 'adsense',
+          'data-custom-att-1': 'val-1',
+          'data-custom-att-2': 'val-2',
+        };
+
+        const adStrategy =
+            new AdStrategy(placements, attributes, new AdTracker([], 0), 1);
 
         return adStrategy.run().then(success => {
           expect(success).to.equal(true);
@@ -84,9 +89,9 @@ describe('ad-strategy', () => {
           expect(anchor2.childNodes).to.have.lengthOf(0);
           const adElement = anchor1.childNodes[0];
           expect(adElement.tagName).to.equal('AMP-AD');
-          expect(adElement).to.have.attribute('type', 'adsense');
-          expect(adElement).to.have.attribute('data-custom-att-1', 'val-1');
-          expect(adElement).to.have.attribute('data-custom-att-2', 'val-2');
+          expect(adElement.getAttribute('type')).to.equal('adsense');
+          expect(adElement.getAttribute('data-custom-att-1')).to.equal('val-1');
+          expect(adElement.getAttribute('data-custom-att-2')).to.equal('val-2');
         });
       });
 
@@ -117,23 +122,21 @@ describe('ad-strategy', () => {
         },
       ],
     };
-    const placements = getPlacementsFromConfigObj(window, configObj);
+    const placements = getPlacementsFromConfigObj(env.win, configObj);
 
     expect(placements).to.have.lengthOf(2);
     sandbox.stub(placements[0], 'placeAd', () => {
       return Promise.resolve(PlacementState.REIZE_FAILED);
     });
 
-    const adStrategy = new AdStrategy('adsense', placements, [
-      {
-        name: 'custom-att-1',
-        value: 'val-1',
-      },
-      {
-        name: 'custom-att-2',
-        value: 'val-2',
-      },
-    ], new AdTracker([], 0), 1);
+    const attributes = {
+      'type': 'adsense',
+      'data-custom-att-1': 'val-1',
+      'data-custom-att-2': 'val-2',
+    };
+
+    const adStrategy =
+        new AdStrategy(placements, attributes, new AdTracker([], 0), 1);
 
     return adStrategy.run().then(success => {
       expect(success).to.equal(true);
@@ -141,9 +144,9 @@ describe('ad-strategy', () => {
       expect(anchor2.childNodes).to.have.lengthOf(1);
       const adElement = anchor2.childNodes[0];
       expect(adElement.tagName).to.equal('AMP-AD');
-      expect(adElement).to.have.attribute('type', 'adsense');
-      expect(adElement).to.have.attribute('data-custom-att-1', 'val-1');
-      expect(adElement).to.have.attribute('data-custom-att-2', 'val-2');
+      expect(adElement.getAttribute('type')).to.equal('adsense');
+      expect(adElement.getAttribute('data-custom-att-1')).to.equal('val-1');
+      expect(adElement.getAttribute('data-custom-att-2')).to.equal('val-2');
     });
   });
 
@@ -183,19 +186,17 @@ describe('ad-strategy', () => {
         },
       ],
     };
-    const placements = getPlacementsFromConfigObj(window, configObj);
+    const placements = getPlacementsFromConfigObj(env.win, configObj);
     expect(placements).to.have.lengthOf(2);
 
-    const adStrategy = new AdStrategy('adsense', placements, [
-      {
-        name: 'custom-att-1',
-        value: 'val-1',
-      },
-      {
-        name: 'custom-att-2',
-        value: 'val-2',
-      },
-    ], new AdTracker([], 200), 2);
+    const attributes = {
+      'type': 'adsense',
+      'data-custom-att-1': 'val-1',
+      'data-custom-att-2': 'val-2',
+    };
+
+    const adStrategy =
+        new AdStrategy(placements, attributes, new AdTracker([], 200), 2);
 
     return adStrategy.run().then(success => {
       expect(success).to.equal(false);
@@ -203,9 +204,9 @@ describe('ad-strategy', () => {
       expect(anchor2.childNodes).to.have.lengthOf(0);
       const adElement = anchor1.childNodes[0];
       expect(adElement.tagName).to.equal('AMP-AD');
-      expect(adElement).to.have.attribute('type', 'adsense');
-      expect(adElement).to.have.attribute('data-custom-att-1', 'val-1');
-      expect(adElement).to.have.attribute('data-custom-att-2', 'val-2');
+      expect(adElement.getAttribute('type')).to.equal('adsense');
+      expect(adElement.getAttribute('data-custom-att-1')).to.equal('val-1');
+      expect(adElement.getAttribute('data-custom-att-2')).to.equal('val-2');
     });
   });
 
@@ -245,19 +246,17 @@ describe('ad-strategy', () => {
         },
       ],
     };
-    const placements = getPlacementsFromConfigObj(window, configObj);
+    const placements = getPlacementsFromConfigObj(env.win, configObj);
     expect(placements).to.have.lengthOf(2);
 
-    const adStrategy = new AdStrategy('adsense', placements, [
-      {
-        name: 'custom-att-1',
-        value: 'val-1',
-      },
-      {
-        name: 'custom-att-2',
-        value: 'val-2',
-      },
-    ], new AdTracker([], 200), 2);
+    const attributes = {
+      'type': 'adsense',
+      'data-custom-att-1': 'val-1',
+      'data-custom-att-2': 'val-2',
+    };
+
+    const adStrategy =
+        new AdStrategy(placements, attributes, new AdTracker([], 200), 2);
 
     return adStrategy.run().then(success => {
       expect(success).to.equal(true);
@@ -265,14 +264,14 @@ describe('ad-strategy', () => {
       expect(anchor2.childNodes).to.have.lengthOf(1);
       const adElement1 = anchor1.childNodes[0];
       expect(adElement1.tagName).to.equal('AMP-AD');
-      expect(adElement1).to.have.attribute('type', 'adsense');
-      expect(adElement1).to.have.attribute('data-custom-att-1', 'val-1');
-      expect(adElement1).to.have.attribute('data-custom-att-2', 'val-2');
+      expect(adElement1.getAttribute('type')).to.equal('adsense');
+      expect(adElement1.getAttribute('data-custom-att-1')).to.equal('val-1');
+      expect(adElement1.getAttribute('data-custom-att-2')).to.equal('val-2');
       const adElement2 = anchor2.childNodes[0];
       expect(adElement2.tagName).to.equal('AMP-AD');
-      expect(adElement2).to.have.attribute('type', 'adsense');
-      expect(adElement2).to.have.attribute('data-custom-att-1', 'val-1');
-      expect(adElement2).to.have.attribute('data-custom-att-2', 'val-2');
+      expect(adElement2.getAttribute('type')).to.equal('adsense');
+      expect(adElement2.getAttribute('data-custom-att-1')).to.equal('val-1');
+      expect(adElement2.getAttribute('data-custom-att-2')).to.equal('val-2');
     });
   });
 
@@ -315,19 +314,17 @@ describe('ad-strategy', () => {
         },
       ],
     };
-    const placements = getPlacementsFromConfigObj(window, configObj);
+    const placements = getPlacementsFromConfigObj(env.win, configObj);
     expect(placements).to.have.lengthOf(2);
 
-    const adStrategy = new AdStrategy('adsense', placements, [
-      {
-        name: 'custom-att-1',
-        value: 'val-1',
-      },
-      {
-        name: 'custom-att-2',
-        value: 'val-2',
-      },
-    ], new AdTracker([fakeExistingAd], 200), 2);
+    const attributes = {
+      'type': 'adsense',
+      'data-custom-att-1': 'val-1',
+      'data-custom-att-2': 'val-2',
+    };
+
+    const adStrategy = new AdStrategy(placements, attributes,
+        new AdTracker([fakeExistingAd], 200), 2);
 
     return adStrategy.run().then(success => {
       expect(success).to.equal(true);
@@ -335,9 +332,9 @@ describe('ad-strategy', () => {
       expect(anchor2.childNodes).to.have.lengthOf(0);
       const adElement1 = anchor1.childNodes[0];
       expect(adElement1.tagName).to.equal('AMP-AD');
-      expect(adElement1).to.have.attribute('type', 'adsense');
-      expect(adElement1).to.have.attribute('data-custom-att-1', 'val-1');
-      expect(adElement1).to.have.attribute('data-custom-att-2', 'val-2');
+      expect(adElement1.getAttribute('type')).to.equal('adsense');
+      expect(adElement1.getAttribute('data-custom-att-1')).to.equal('val-1');
+      expect(adElement1.getAttribute('data-custom-att-2')).to.equal('val-2');
     });
   });
 
@@ -369,7 +366,7 @@ describe('ad-strategy', () => {
             },
           ],
         };
-        const placements = getPlacementsFromConfigObj(window, configObj);
+        const placements = getPlacementsFromConfigObj(env.win, configObj);
 
         expect(placements).to.have.lengthOf(2);
         sandbox.stub(placements[0], 'placeAd', () => {
@@ -379,16 +376,12 @@ describe('ad-strategy', () => {
           return Promise.resolve(PlacementState.REIZE_FAILED);
         });
 
-        const adStrategy = new AdStrategy('adsense', placements, [
-          {
-            name: 'custom-att-1',
-            value: 'val-1',
-          },
-          {
-            name: 'custom-att-2',
-            value: 'val-2',
-          },
-        ], new AdTracker([], 0), 1);
+        const attributes = {
+          'type': 'adsense',
+        };
+
+        const adStrategy =
+            new AdStrategy(placements, attributes, new AdTracker([], 0), 1);
 
         return adStrategy.run().then(success => {
           expect(success).to.equal(false);

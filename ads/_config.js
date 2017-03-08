@@ -67,6 +67,10 @@ export const adConfig = {
     prefetch: 'https://i.socdm.com/sdk/js/adg-script-loader.js',
   },
 
+  adhese: {
+    renderStartImplemented: true,
+  },
+
   adition: {},
 
   adman: {},
@@ -84,6 +88,11 @@ export const adConfig = {
     preconnect: 'https://api.adsnative.com',
   },
 
+  adspeed: {
+    preconnect: 'https://g.adspeed.net',
+    renderStartImplemented: true,
+  },
+
   adspirit: {},
 
   adstir: {
@@ -99,8 +108,25 @@ export const adConfig = {
     ],
   },
 
+  adthrive: {
+    prefetch: [
+      'https://www.googletagservices.com/tag/js/gpt.js',
+    ],
+    preconnect: [
+      'https://partner.googleadservices.com',
+      'https://securepubads.g.doubleclick.net',
+      'https://tpc.googlesyndication.com',
+    ],
+    renderStartImplemented: true,
+  },
+
   aduptech: {
     prefetch: 'https://s.d.adup-tech.com/jsapi',
+    preconnect: [
+      'https://d.adup-tech.com',
+      'https://m.adup-tech.com',
+    ],
+    renderStartImplemented: true,
   },
 
   adverline: {
@@ -144,6 +170,8 @@ export const adConfig = {
     prefetch: 'https://s.ato.mx/p.js',
   },
 
+  brainy: {},
+
   caajainfeed: {
     prefetch: [
       'https://cdn.amanad.adtdp.com/sdk/ajaamp-v1.0.js',
@@ -151,6 +179,10 @@ export const adConfig = {
     preconnect: [
       'https://ad.amanad.adtdp.com',
     ],
+  },
+
+  capirs: {
+    renderStartImplemented: true,
   },
 
   caprofitx: {
@@ -202,6 +234,11 @@ export const adConfig = {
       'https://tpc.googlesyndication.com',
     ],
     clientIdScope: 'AMP_ECID_GOOGLE',
+    renderStartImplemented: true,
+  },
+
+  eas: {
+    prefetch: 'https://amp.emediate.eu/amp.v0.js',
     renderStartImplemented: true,
   },
 
@@ -279,6 +316,10 @@ export const adConfig = {
   },
 
   kargo: {},
+
+  kiosked: {
+    renderStartImplemented: true,
+  },
 
   kixer: {
     prefetch: 'https://cdn.kixer.com/ad/load.js',
@@ -367,6 +408,12 @@ export const adConfig = {
     ],
   },
 
+  mywidget: {
+    preconnect: 'https://likemore-fe.go.mail.ru',
+    prefetch: 'https://likemore-go.imgsmail.ru/widget.amp.js',
+    renderStartImplemented: true,
+  },
+
   nativo: {
     prefetch: 'https://s.ntv.io/serve/load.js',
   },
@@ -449,6 +496,15 @@ export const adConfig = {
     prefetch: 'https://c.imedia.cz/js/amp.js',
   },
 
+  slimcutmedia: {
+    preconnect: [
+      'https://sb.freeskreen.com',
+      'https://static.freeskreen.com',
+      'https://video.freeskreen.com',
+    ],
+    renderStartImplemented: true,
+  },
+
   smartadserver: {
     prefetch: 'https://ec-ns.sascdn.com/diff/js/amp.v0.js',
     preconnect: 'https://static.sascdn.com',
@@ -473,6 +529,21 @@ export const adConfig = {
 
   sovrn: {
     prefetch: 'https://ap.lijit.com/www/sovrn_amp/sovrn_ads.js',
+  },
+
+  sunmedia: {
+    prefetch: 'https://vod.addevweb.com/sunmedia/amp/ads/sunmedia.js',
+    preconnect: 'https://static.addevweb.com',
+    renderStartImplemented: true,
+  },
+
+  swoop: {
+    prefetch: 'https://www.swoop-amp.com/amp.js',
+    preconnect: [
+      'https://www.swpsvc.com',
+      'https://client.swpcld.com',
+    ],
+    renderStartImplemented: true,
   },
 
   taboola: {},
@@ -518,8 +589,6 @@ export const adConfig = {
     prefetch: 'https://cdn.x-lift.jp/resources/common/xlift_amp.js',
     renderStartImplemented: true,
   },
-
-  xrostssp: {},
 
   yahoo: {
     prefetch: 'https://s.yimg.com/os/ampad/display.js',

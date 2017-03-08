@@ -18,9 +18,9 @@ tags: {  # amp-access-laterpay
   html_format: AMP
   tag_name: "SCRIPT"
   spec_name: "amp-access-laterpay extension .js script"
+  requires: "amp-access extension .js script"
   mandatory_parent: "HEAD"
   unique: true
-  also_requires_tag: "amp-access extension .js script"
   attrs: {
     name: "async"
     mandatory: true
@@ -47,5 +47,5 @@ tags: {  # amp-access-laterpay
       error_message: "contents"
     }
   }
-  spec_url: "https://github.com/ampproject/amphtml/blob/master/extensions/amp-access-laterpay/amp-access-laterpay.md"
+  spec_url: "https://www.ampproject.org/docs/reference/components/amp-access-laterpay"
 }

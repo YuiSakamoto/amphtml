@@ -15,10 +15,13 @@
  */
 
 import {documentInfoForDoc} from '../document-info';
-import {whenDocumentReady, whenDocumentComplete} from '../document-ready';
+import {layoutRectLtwh} from '../layout-rect';
 import {fromClass} from '../service';
 import {resourcesForDoc} from '../resources';
 import {viewerForDoc} from '../viewer';
+import {viewportForDoc} from '../viewport';
+import {whenDocumentComplete, whenDocumentReady} from '../document-ready';
+import {urls} from '../config';
 
 
 /**
@@ -88,15 +91,8 @@ export class Performance {
     /** @private {boolean} */
     this.isPerformanceTrackingOn_ = false;
 
-    /** @private @const {!Promise} */
-    this.whenReadyToRetrieveResourcesPromise_ =
-        whenDocumentReady(this.win.document)
-        .then(() => {
-          // Two fold. First, resolve the promise to undefined.
-          // Second, causes a delay by introducing another async request
-          // (this `#then` block) so that Resources' onDocumentReady event
-          // is guaranteed to fire.
-        });
+    /** @private {?string} */
+    this.enabledExperiments_ = null;
 
     // Tick window.onload event.
     whenDocumentComplete(win.document).then(() => {
@@ -170,7 +166,9 @@ export class Performance {
       });
     }
 
-    this.whenViewportLayoutComplete_().then(() => {
+    // TODO(dvoytenko, #7815): switch back to the non-legacy version once the
+    // reporting regression is confirmed.
+    this.whenViewportLayoutCompleteLegacy_().then(() => {
       if (didStartInPrerender) {
         const userPerceivedVisualCompletenesssTime = docVisibleTime > -1
             ? (Date.now() - docVisibleTime)
@@ -198,20 +196,32 @@ export class Performance {
    * @private
    */
   whenViewportLayoutComplete_() {
-    return this.whenReadyToRetrieveResources_().then(() => {
-      return Promise.all(this.resources_.getResourcesInViewport().map(r => {
-        return r.loadedOnce();
-      }));
-    });
+    const size = viewportForDoc(this.win.document).getSize();
+    const rect = layoutRectLtwh(0, 0, size.width, size.height);
+    return this.resources_.getResourcesInRect(
+            this.win, rect, /* isInPrerender */ true)
+        .then(resources => Promise.all(resources.map(r => r.loadedOnce())));
   }
 
   /**
-   * Returns a promise that is resolved when the document is ready and
-   * after a microtask delay.
+   * TODO(dvoytenko, #7815): remove once the reporting regression is confirmed.
    * @return {!Promise}
+   * @private
    */
-  whenReadyToRetrieveResources_() {
-    return this.whenReadyToRetrieveResourcesPromise_;
+  whenViewportLayoutCompleteLegacy_() {
+    const whenReadyToRetrieveResources = whenDocumentReady(this.win.document)
+        .then(() => {
+          // Two fold. First, resolve the promise to undefined.
+          // Second, causes a delay by introducing another async request
+          // (this `#then` block) so that Resources' onDocumentReady event
+          // is guaranteed to fire.
+        });
+    return whenReadyToRetrieveResources.then(() => {
+      return Promise.all(this.resources_.getResourcesInViewportLegacy()
+          .map(r => {
+            return r.loadedOnce();
+          }));
+    });
   }
 
   /**
@@ -229,6 +239,8 @@ export class Performance {
    * Ticks a timing event.
    *
    * @param {string} label The variable name as it will be reported.
+   *     See TICKEVENTS.md for available metrics, and edit this file
+   *     when adding a new metric.
    * @param {?string=} opt_from The label of a previous tick to use as a
    *    relative start for this tick.
    * @param {number=} opt_value The time to record the tick at. Optional, if
@@ -287,11 +299,33 @@ export class Performance {
    */
   flush() {
     if (this.isMessagingReady_ && this.isPerformanceTrackingOn_) {
-      this.viewer_.sendMessage('sendCsi', undefined,
-          /* cancelUnsent */true);
+      const experiments = this.getEnabledExperiments_();
+      const payload = experiments === '' ? undefined : {
+        ampexp: experiments,
+      };
+      this.viewer_.sendMessage('sendCsi', payload, /* cancelUnsent */true);
     }
   }
 
+  /**
+   * @returns {string} comma-separated list of experiment IDs
+   * @private
+   */
+  getEnabledExperiments_() {
+    if (this.enabledExperiments_ !== null) {
+      return this.enabledExperiments_;
+    }
+    const experiments = [];
+    // Check if it's the legacy CDN domain.
+    if (this.getHostname_() == urls.cdn.split('://')[1]) {
+      experiments.push('legacy-cdn-domain');
+    }
+    return this.enabledExperiments_ = experiments.join(',');
+  }
+
+  getHostname_() {
+    return this.win.location.hostname;
+  }
 
   /**
    * Queues the events to be flushed when tick function is set.
@@ -346,7 +380,9 @@ export class Performance {
    * @private
    */
   setDocumentInfoParams_() {
-    return this.whenViewportLayoutComplete_().then(() => {
+    // TODO(dvoytenko, #7815): switch back to the non-legacy version once the
+    // reporting regression is confirmed.
+    return this.whenViewportLayoutCompleteLegacy_().then(() => {
       const params = Object.create(null);
       const sourceUrl = documentInfoForDoc(this.win.document).sourceUrl
           .replace(/#.*/, '');
